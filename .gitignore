@@ -1,3 +1,6 @@
+# Firebase
+GoogleService-Info.plist
+
 # Xcode
 .DS_Store
 xcuserdata/
@@ -24,4 +27,17 @@ Podfile.lock
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots
-fastlane/test_output 
+fastlane/test_output
+
+# Additional rules
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3 

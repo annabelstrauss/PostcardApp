@@ -7,6 +7,7 @@
 
 import SwiftUI
 import PhotosUI
+import FirebaseFirestore
 
 struct IgnoreKeyboardModifier: ViewModifier {
     func body(content: Content) -> some View {
@@ -378,7 +379,8 @@ struct ContentView: View {
         
         isSaving = true
         
-        let postcardData = PostcardData(
+        let postcard = PostcardModel(
+            id: nil, // Firebase will generate this
             imageData: imageData,
             message: message,
             recipientName: recipient.name,
@@ -389,25 +391,32 @@ struct ContentView: View {
 
         // Debug prints
         print("📬 Sending postcard:")
-        print("To: \(postcardData.recipientName)")
-        print("Phone: \(postcardData.recipientPhone)")
-        print("Message: \(postcardData.message)")
-        print("Image size: \(postcardData.imageData.count / 1024) KB")
-        print("Date: \(postcardData.dateCreated)")
+        print("To: \(postcard.recipientName)")
+        print("Phone: \(postcard.recipientPhone)")
+        print("Message: \(postcard.message)")
+        print("Image size: \(postcard.imageData.count / 1024) KB")
+        print("Date: \(postcard.dateCreated)")
 
-        // Wrap async code in Task
+        // Save to Firebase
         Task {
-            // Simulate network delay
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-            
-            await MainActor.run {
-                // Show confirmation
-                isShowingSentConfirmation = true
-                isSaving = false
+            do {
+                try await FirebaseManager.shared.savePostcard(postcard)
                 
-                // Reset the form after a delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    resetForm()
+                await MainActor.run {
+                    // Show confirmation
+                    isShowingSentConfirmation = true
+                    isSaving = false
+                    
+                    // Reset the form after a delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        resetForm()
+                    }
+                }
+            } catch {
+                print("Error saving postcard: \(error)")
+                await MainActor.run {
+                    isSaving = false
+                    // You might want to show an error alert here
                 }
             }
         }

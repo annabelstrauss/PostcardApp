@@ -1,6 +1,8 @@
 import SwiftUI
+import FirebaseFirestore
 
-struct PostcardData: Codable {
+struct PostcardModel: Identifiable, Codable {
+    @DocumentID var id: String?
     let imageData: Data
     let message: String
     let recipientName: String
@@ -13,8 +15,19 @@ struct PostcardData: Codable {
         case sent
         case failed
     }
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case imageData
+        case message
+        case recipientName
+        case recipientPhone
+        case dateCreated
+        case status
+    }
 }
 
+// Keep this if you need it for contact selection
 struct Recipient {
     let name: String
     let phone: String
