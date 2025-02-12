@@ -58,6 +58,9 @@ struct ContentView: View {
     @State private var isShowingSentConfirmation = false
     @State private var isSaving = false
 
+    // Add this state variable at the top with other @State properties
+    @State private var isShowingSentPostcards = false
+
     // White to grey custom gradient definition
     private let customGradient = LinearGradient(
         gradient: Gradient(colors: [
@@ -71,6 +74,11 @@ struct ContentView: View {
     // Add this computed property near the top of ContentView with other properties
     private var canSendPostcard: Bool {
         selectedImage != nil && !message.isEmpty && selectedRecipient != nil
+    }
+
+    // Add this computed property near the other computed properties
+    private var hasPostcardData: Bool {
+        selectedImage != nil || !message.isEmpty || selectedRecipient != nil
     }
     
     var body: some View {
@@ -96,6 +104,8 @@ struct ContentView: View {
                             withAnimation(.spring(duration: 0.3)) {
                                 isMailPressed = true
                             }
+                            // Show sent postcards sheet
+                            isShowingSentPostcards = true
                             // Reset after a short delay
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                 withAnimation(.spring(duration: 0.3)) {
@@ -114,20 +124,24 @@ struct ContentView: View {
                         .background(customGradient)
                         .cornerRadius(1)
                         .shadow(color: .black.opacity(0.19), radius: 10, x: 1, y: 4)
-                        .rotationEffect(.degrees(isDeletePressed ? -6.0 : 6.0))
+                        .rotationEffect(.degrees(isDeletePressed && !hasPostcardData ? -6.0 : 6.0))
                         .onTapGesture {
                             deleteHaptic.impactOccurred()
-                            // Trigger the animation
-                            withAnimation(.spring(duration: 0.3)) {
-                                isDeletePressed = true
+                            // Only show delete alert if there's data to delete
+                            if hasPostcardData {
                                 isShowingDeleteAlert = true
                             }
-                            // Reset after a short delay
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            // Trigger the animation only if there's no data
+                            if !hasPostcardData {
                                 withAnimation(.spring(duration: 0.3)) {
-                                    isDeletePressed = false
+                                    isDeletePressed = true
                                 }
-                                
+                                // Reset after a short delay
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    withAnimation(.spring(duration: 0.3)) {
+                                        isDeletePressed = false
+                                    }
+                                }
                             }
                         }
                 }
@@ -365,6 +379,11 @@ struct ContentView: View {
                     }
             }
         }
+
+        // Add this sheet presentation modifier near the other sheet modifiers
+        .sheet(isPresented: $isShowingSentPostcards) {
+            SentPostcardsView()
+        }
     }
 
     // Add this function to handle saving and sending the postcard
@@ -394,7 +413,11 @@ struct ContentView: View {
         print("To: \(postcard.recipientName)")
         print("Phone: \(postcard.recipientPhone)")
         print("Message: \(postcard.message)")
-        print("Image size: \(postcard.imageData.count / 1024) KB")
+        if let imageData = postcard.imageData {
+            print("Image size: \(imageData.count / 1024) KB")
+        } else {
+            print("No image data")
+        }
         print("Date: \(postcard.dateCreated)")
 
         // Save to Firebase

@@ -14,10 +14,14 @@ class FirebaseManager: ObservableObject {
     func savePostcard(_ postcard: PostcardModel) async throws {
         do {
             // 1. First upload the image to Storage
+            guard let imageData = postcard.imageData else {
+                throw NSError(domain: "PostcardError", code: 1, userInfo: [NSLocalizedDescriptionKey: "No image data provided"])
+            }
+            
             let imageRef = storage.child("postcards/\(UUID().uuidString).jpg")
             print("Attempting to upload to path: \(imageRef.fullPath)")
             
-            _ = try await imageRef.putDataAsync(postcard.imageData)
+            _ = try await imageRef.putDataAsync(imageData)
             print("Image upload successful")
             
             let imageUrl = try await imageRef.downloadURL()
@@ -43,6 +47,18 @@ class FirebaseManager: ObservableObject {
                 print("Error userInfo: \(nsError.userInfo)")
             }
             throw error
+        }
+    }
+    
+    func fetchSentPostcards() async throws -> [PostcardModel] {
+        let snapshot = try await db.collection("postcards")
+            .order(by: "dateCreated", descending: true)
+            .getDocuments()
+        
+        return try snapshot.documents.compactMap { document -> PostcardModel? in
+            var postcard = try document.data(as: PostcardModel.self)
+            postcard.id = document.documentID
+            return postcard
         }
     }
 } 
