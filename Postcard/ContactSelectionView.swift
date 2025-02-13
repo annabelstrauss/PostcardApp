@@ -1,6 +1,37 @@
 import SwiftUI
 import Contacts
 
+// First, let's create a separate view for the contact row
+private struct ContactRow: View {
+    let contact: CNContact
+    let phoneNumber: CNLabeledValue<CNPhoneNumber>
+    let onSelect: (Recipient) -> Void
+    
+    var body: some View {
+        Button(action: {
+            onSelect(Recipient(
+                name: "\(contact.givenName) \(contact.familyName)",
+                phone: phoneNumber.value.stringValue
+            ))
+        }) {
+            HStack {
+                Circle()
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 40, height: 40)
+                
+                VStack(alignment: .leading) {
+                    Text("\(contact.givenName) \(contact.familyName)")
+                        .foregroundColor(.black)
+                    
+                    Text(phoneNumber.value.stringValue)
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+            }
+        }
+    }
+}
+
 struct ContactSelectionView: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var selectedRecipient: Recipient?
@@ -8,13 +39,78 @@ struct ContactSelectionView: View {
     @State private var contacts: [CNContact] = []
     @State private var isShowingPermissionAlert = false
     
-    var filteredContacts: [CNContact] {
-        if searchText.isEmpty {
+    let testContact = Recipient(
+        name: "Annabel Strauss (Debug)",
+        phone: "917-477-9901"
+    )
+    
+    // Break down the filtering logic into a separate function
+    private func filterContacts(_ contacts: [CNContact]) -> [CNContact] {
+        guard !searchText.isEmpty else {
             return contacts
         }
         return contacts.filter { contact in
             let fullName = "\(contact.givenName) \(contact.familyName)"
             return fullName.lowercased().contains(searchText.lowercased())
+        }
+    }
+    
+    // Simplify the computed property
+    var filteredContacts: [CNContact] {
+        filterContacts(contacts)
+    }
+    
+    // Separate view for test contact
+    private var testContactSection: some View {
+        Section {
+            Button(action: {
+                selectedRecipient = testContact
+                dismiss()
+            }) {
+                HStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                        .overlay(
+                            Text("🛠️")
+                                .font(.system(size: 20))
+                        )
+                    
+                    VStack(alignment: .leading) {
+                        Text(testContact.name)
+                            .foregroundColor(.black)
+                        Text(testContact.phone)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
+            }
+        } header: {
+            Text("Test Contact")
+                .font(.caption)
+                .foregroundColor(.gray)
+        }
+    }
+    
+    // Separate view for contacts section
+    private var contactsSection: some View {
+        Section {
+            ForEach(filteredContacts, id: \.identifier) { contact in
+                ForEach(contact.phoneNumbers, id: \.identifier) { phoneNumber in
+                    ContactRow(
+                        contact: contact,
+                        phoneNumber: phoneNumber,
+                        onSelect: { recipient in
+                            selectedRecipient = recipient
+                            dismiss()
+                        }
+                    )
+                }
+            }
+        } header: {
+            Text("Contacts")
+                .font(.caption)
+                .foregroundColor(.gray)
         }
     }
     
@@ -43,36 +139,10 @@ struct ContactSelectionView: View {
                     .textFieldStyle(.roundedBorder)
                     .padding()
                 
-                // Contacts list
-                List(filteredContacts, id: \.identifier) { contact in
-                    ForEach(contact.phoneNumbers, id: \.identifier) { phoneNumber in
-                        Button(action: {
-                            // Create Recipient with name and phone
-                            selectedRecipient = Recipient(
-                                name: "\(contact.givenName) \(contact.familyName)",
-                                phone: phoneNumber.value.stringValue
-                            )
-                            dismiss()
-                        }) {
-                            HStack {
-                                // Contact avatar circle
-                                Circle()
-                                    .fill(Color.gray.opacity(0.2))
-                                    .frame(width: 40, height: 40)
-                                
-                                VStack(alignment: .leading) {
-                                    // Contact name
-                                    Text("\(contact.givenName) \(contact.familyName)")
-                                        .foregroundColor(.black)
-                                    
-                                    // Phone number
-                                    Text(phoneNumber.value.stringValue)
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
-                                }
-                            }
-                        }
-                    }
+                // Updated List structure
+                List {
+                    testContactSection
+                    contactsSection
                 }
                 .listStyle(.plain)
             }
