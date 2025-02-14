@@ -1,6 +1,7 @@
 import FirebaseCore
 import FirebaseFirestore
 import FirebaseStorage
+import Foundation
 
 class FirebaseManager: ObservableObject {
     static let shared = FirebaseManager()
@@ -11,7 +12,7 @@ class FirebaseManager: ObservableObject {
         // Remove FirebaseApp.configure() from here
     }
     
-    func savePostcard(_ postcard: PostcardModel) async throws {
+    func savePostcard(_ postcard: PostcardModel) async throws -> PostcardModel {
         do {
             // 1. First upload the image to Storage
             guard let imageData = postcard.imageData else {
@@ -37,8 +38,13 @@ class FirebaseManager: ObservableObject {
                 "status": postcard.status.rawValue
             ]
             
-            // 3. Save to Firestore
-            try await db.collection("postcards").addDocument(data: postcardData)
+            // 3. Save to Firestore and get the document reference
+            let docRef = try await db.collection("postcards").addDocument(data: postcardData)
+            
+            // 4. Create and return a new PostcardModel with the document ID
+            var savedPostcard = postcard
+            savedPostcard.id = docRef.documentID
+            return savedPostcard
         } catch {
             print("Detailed error: \(error.localizedDescription)")
             if let nsError = error as NSError? {
@@ -60,5 +66,13 @@ class FirebaseManager: ObservableObject {
             postcard.id = document.documentID
             return postcard
         }
+    }
+    
+    func updatePostcardStatus(id: String, status: PostcardStatus) async throws {
+        let postcardRef = db.collection("postcards").document(id)
+        try await postcardRef.updateData([
+            "status": status.rawValue
+        ])
+        print("Updated postcard \(id) status to: \(status)")
     }
 } 

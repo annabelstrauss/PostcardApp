@@ -2,6 +2,15 @@ import SwiftUI
 import FirebaseFirestore
 import Foundation
 
+// Move PostcardStatus here, before PostcardModel
+enum PostcardStatus: String, Codable {
+    case pending // Initial state
+    case addressRequested // After sending initial message
+    case addressReceived // After recipient responds
+    case completed // After thank you message sent
+    case failed // If something goes wrong
+}
+
 struct PostcardModel: Identifiable, Codable {
     @DocumentID var id: String?
     var imageData: Data?  // Optional now
@@ -10,13 +19,8 @@ struct PostcardModel: Identifiable, Codable {
     let recipientName: String
     let recipientPhone: String
     let dateCreated: Date
-    let status: PostcardStatus
-    
-    enum PostcardStatus: String, Codable {
-        case pending
-        case sent
-        case failed
-    }
+    var address: String?
+    var status: PostcardStatus
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -26,11 +30,12 @@ struct PostcardModel: Identifiable, Codable {
         case recipientName
         case recipientPhone
         case dateCreated
+        case address
         case status
     }
     
     // Custom initializer for creating new postcards locally
-    init(id: String? = nil, imageData: Data, message: String, recipientName: String, recipientPhone: String, dateCreated: Date, status: PostcardStatus) {
+    init(id: String? = nil, imageData: Data, message: String, recipientName: String, recipientPhone: String, dateCreated: Date, address: String?, status: PostcardStatus) {
         self.id = id
         self.imageData = imageData
         self.imageUrl = nil
@@ -38,6 +43,7 @@ struct PostcardModel: Identifiable, Codable {
         self.recipientName = recipientName
         self.recipientPhone = recipientPhone
         self.dateCreated = dateCreated
+        self.address = address
         self.status = status
     }
     
@@ -51,6 +57,7 @@ struct PostcardModel: Identifiable, Codable {
         recipientName = try container.decode(String.self, forKey: .recipientName)
         recipientPhone = try container.decode(String.self, forKey: .recipientPhone)
         dateCreated = try container.decode(Date.self, forKey: .dateCreated)
+        address = try container.decodeIfPresent(String.self, forKey: .address)
         status = try container.decode(PostcardStatus.self, forKey: .status)
     }
 }

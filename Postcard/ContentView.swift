@@ -393,53 +393,64 @@ struct ContentView: View {
               let uiImage = selectedImage.asUIImage(),
               let imageData = uiImage.jpegData(compressionQuality: 0.8),
               let recipient = selectedRecipient else {
+            print("❌ Failed guard check in sendPostcard()")
             return
         }
         
         isSaving = true
         
         let postcard = PostcardModel(
-            id: nil, // Firebase will generate this
+            id: nil,
             imageData: imageData,
             message: message,
             recipientName: recipient.name,
             recipientPhone: recipient.phone,
             dateCreated: Date(),
+            address: nil,
             status: .pending
         )
 
         // Debug prints
-        print("📬 Sending postcard:")
+        print("📬 Starting postcard send process:")
         print("To: \(postcard.recipientName)")
         print("Phone: \(postcard.recipientPhone)")
-        print("Message: \(postcard.message)")
-        if let imageData = postcard.imageData {
-            print("Image size: \(imageData.count / 1024) KB")
-        } else {
-            print("No image data")
-        }
-        print("Date: \(postcard.dateCreated)")
+        print("Message length: \(postcard.message.count) characters")
+        print("Image size: \(imageData.count / 1024) KB")
 
-        // Save to Firebase
         Task {
             do {
-                try await FirebaseManager.shared.savePostcard(postcard)
+                print("💾 Saving to Firebase...")
+                let savedPostcard = try await FirebaseManager.shared.savePostcard(postcard)
+                print("✅ Firebase save successful, id: \(savedPostcard.id ?? "nil")")
                 
+                print("📱 Sending initial message...")
+                try await SendblueManager.shared.sendInitialMessage(to: recipient.phone)
+                print("✅ Initial message sent successfully")
+                
+                print("📝 Updating postcard status...")
+                try await FirebaseManager.shared.updatePostcardStatus(id: savedPostcard.id!, status: .addressRequested)
+                print("✅ Status updated successfully")
+
                 await MainActor.run {
-                    // Show confirmation
                     isShowingSentConfirmation = true
                     isSaving = false
                     
-                    // Reset the form after a delay
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         resetForm()
                     }
                 }
             } catch {
-                print("Error saving postcard: \(error)")
+                print("❌ Error in send process: \(error)")
+                if let nsError = error as NSError? {
+                    print("Domain: \(nsError.domain)")
+                    print("Code: \(nsError.code)")
+                    print("Description: \(nsError.localizedDescription)")
+                    print("User Info: \(nsError.userInfo)")
+                }
+                
                 await MainActor.run {
                     isSaving = false
-                    // You might want to show an error alert here
+                    // TODO: Show error alert to user
                 }
             }
         }
