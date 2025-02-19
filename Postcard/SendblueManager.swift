@@ -24,17 +24,15 @@ class SendblueManager {
     
     func sendInitialMessage(to phoneNumber: String) async throws {
         // Format phone number to E.164 format
-        let formattedPhone = formatPhoneNumber(phoneNumber)
+        let formattedPhone = SendblueManager.formatPhoneNumber(phoneNumber)
         
-        let message = "Hi, we're trying to send you a postcard. What is your address?"
+        let message = "Hi! Annabel Strauss is trying to send you a postcard 💌 What is your address?"
         
         let endpoint = "\(baseURL)/send-message"
         let parameters: [String: Any] = [
+            "from_number": "+14152005823", //The message dispatcher
             "number": formattedPhone,
             "content": message
-            // "message": message,
-            // "service": "imessage",
-            // "is_sandbox": false  // Add this to ensure we're in production mode
         ]
         
         print("📤 Sending request to Sendblue:")
@@ -84,16 +82,15 @@ class SendblueManager {
         }
     }
     
-    private func formatPhoneNumber(_ phone: String) -> String {
+    public static func formatPhoneNumber(_ phone: String) -> String {
         // Remove any non-numeric characters
         let numbers = phone.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
         
-        // If it starts with +1, use as is, otherwise add +1
-        if numbers.hasPrefix("+1") {
-            return numbers
+        // If it starts with 1 and has 11 digits, add +, otherwise add +1
+        if numbers.hasPrefix("1") && numbers.count == 11 {
+            return "+" + numbers
         } else {
             return "+1" + numbers
-
         }
     }
     

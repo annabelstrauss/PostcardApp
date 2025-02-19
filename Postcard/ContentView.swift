@@ -399,12 +399,15 @@ struct ContentView: View {
         
         isSaving = true
         
+        // Format the phone number before creating the PostcardModel
+        let formattedPhone = SendblueManager.formatPhoneNumber(recipient.phone)
+        
         let postcard = PostcardModel(
             id: nil,
             imageData: imageData,
             message: message,
             recipientName: recipient.name,
-            recipientPhone: recipient.phone,
+            recipientPhone: formattedPhone,  // Use the formatted phone number
             dateCreated: Date(),
             address: nil,
             status: .pending

@@ -40,8 +40,8 @@ struct ContactSelectionView: View {
     @State private var isShowingPermissionAlert = false
     
     let testContact = Recipient(
-        name: "Annabel Strauss (Debug)",
-        phone: "917-477-9901"
+       name: "Annabel Strauss",
+       phone: "917-477-9901"
     )
     
     // Break down the filtering logic into a separate function
