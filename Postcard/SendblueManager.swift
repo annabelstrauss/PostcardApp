@@ -26,18 +26,16 @@ class SendblueManager {
         // Format phone number to E.164 format
         let formattedPhone = SendblueManager.formatPhoneNumber(phoneNumber)
         
-        let message = "Hi! Annabel Strauss is trying to send you a postcard 💌 What is your address?"
+        let message = "Hi! Annabel Strauss is trying to send you a postcard 💌 What address should we send it to?"
         
         let endpoint = "\(baseURL)/send-message"
         let parameters: [String: Any] = [
-            "from_number": "+14152005823", //The message dispatcher
+            "from_number": "+14152005823",
             "number": formattedPhone,
             "content": message
         ]
         
-        print("📤 Sending request to Sendblue:")
-        print("Endpoint: \(endpoint)")
-        print("Phone: \(formattedPhone)")
+        print("📤 Sending request to Sendblue...")
         
         var request = URLRequest(url: URL(string: endpoint)!)
         request.httpMethod = "POST"
@@ -59,24 +57,9 @@ class SendblueManager {
                 print(responseString)
             }
             
-            // Check for specific status codes
-            switch httpResponse.statusCode {
-            case 200...299:
-                // Success
-                return
-            case 400:
-                throw SendblueError.apiError("Bad request - check phone number format", 400)
-            case 401:
-                throw SendblueError.apiError("Authentication failed - check API credentials", 401)
-            case 403:
-                throw SendblueError.apiError("Forbidden - account may be inactive", 403)
-            case 429:
-                throw SendblueError.apiError("Rate limit exceeded", 429)
-            default:
-                throw SendblueError.apiError("Server error: \(httpResponse.statusCode)", httpResponse.statusCode)
+            guard (200...299).contains(httpResponse.statusCode) else {
+                throw SendblueError.apiError("Failed to send initial message", httpResponse.statusCode)
             }
-        } catch let error as SendblueError {
-            throw error
         } catch {
             throw SendblueError.networkError(error)
         }
@@ -92,33 +75,5 @@ class SendblueManager {
         } else {
             return "+1" + numbers
         }
-    }
-    
-    func sendThankYouMessage(to phoneNumber: String) async throws {
-        let message = "Thank you."
-        
-        let endpoint = "\(baseURL)/send-message"
-        let parameters: [String: Any] = [
-            "phone_number": phoneNumber,
-            "message": message,
-            "service": "imessage"
-        ]
-        
-        var request = URLRequest(url: URL(string: endpoint)!)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(apiKey, forHTTPHeaderField: "SB-API-KEY-ID")
-        request.setValue(apiSecret, forHTTPHeaderField: "SB-API-SECRET-KEY")
-        request.httpBody = try JSONSerialization.data(withJSONObject: parameters)
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw SendblueError.invalidResponse
-        }
-        
-        // Handle response if needed
-        print("Thank you message sent successfully: \(String(data: data, encoding: .utf8) ?? "")")
     }
 } 

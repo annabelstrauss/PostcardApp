@@ -1,7 +1,23 @@
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import { onRequest } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
+import fetch from 'node-fetch';
 
 admin.initializeApp();
+
+// Sendblue configuration
+const SENDBLUE_CONFIG = {
+    apiKey: process.env.FUNCTIONS_CONFIG_SENDBLUE_API_KEY ?? process.env.SENDBLUE_API_KEY,
+    apiSecret: process.env.FUNCTIONS_CONFIG_SENDBLUE_API_SECRET ?? process.env.SENDBLUE_API_SECRET,
+    fromNumber: '+14152005823'
+};
+
+// Validate credentials exist
+if (!SENDBLUE_CONFIG.apiKey || !SENDBLUE_CONFIG.apiSecret) {
+    throw new Error('Sendblue API credentials not configured');
+}
 
 export const handleSendblueWebhook = onRequest(async (request, response) => {
     // Verify the request is POST
@@ -12,7 +28,7 @@ export const handleSendblueWebhook = onRequest(async (request, response) => {
 
     try {
         const { 
-            from_number, // Phone number of the person who sent the message
+            from_number,  // Changed from recipient_number to from_number
             content,     // The message content (should contain the address)
         } = request.body;
 
@@ -34,7 +50,7 @@ export const handleSendblueWebhook = onRequest(async (request, response) => {
             .collection('postcards')
             .where('recipientPhone', '==', formattedPhone)
             .where('status', '==', 'addressRequested')
-            .orderBy('dateCreated', 'desc') // Get most recent if multiple exist
+            .orderBy('dateCreated', 'desc')
             .limit(1)
             .get();
 
@@ -48,10 +64,41 @@ export const handleSendblueWebhook = onRequest(async (request, response) => {
         const postcard = postcardSnapshot.docs[0];
         await postcard.ref.update({
             address: content,
-            status: 'addressReceived'
+            status: 'addressReceived',
+            addressReceivedAt: admin.firestore.FieldValue.serverTimestamp()
         });
 
-        console.log(`Updated postcard ${postcard.id} with address from ${formattedPhone}`);
+        // Send thank you message
+        try {
+            const thankYouResponse = await fetch('https://api.sendblue.co/api/send-message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'SB-API-KEY-ID': SENDBLUE_CONFIG.apiKey!,
+                    'SB-API-SECRET-KEY': SENDBLUE_CONFIG.apiSecret!
+                } as const,
+                body: JSON.stringify({
+                    from_number: SENDBLUE_CONFIG.fromNumber,
+                    number: formattedPhone,
+                    content: 'Thank you! Your postcard will be on its way soon! 📬'
+                })
+            });
+
+            const responseData = await thankYouResponse.text();
+            console.log('Sendblue thank you message response:', {
+                status: thankYouResponse.status,
+                body: responseData
+            });
+
+            if (!thankYouResponse.ok) {
+                throw new Error(`Failed to send thank you message: ${thankYouResponse.status} ${responseData}`);
+            }
+        } catch (error) {
+            console.error('Error sending thank you message:', error);
+            // Don't throw the error so we still return success for the webhook
+        }
+
+        console.log(`Updated postcard ${postcard.id} with address from ${formattedPhone} and sent thank you`);
         response.status(200).send('Webhook processed successfully');
 
     } catch (error) {
