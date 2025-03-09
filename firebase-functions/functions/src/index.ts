@@ -320,7 +320,7 @@ export const createAndSendPostcard = onRequest(async (request, response) => {
 
         // Step 1: Create the contact
         console.log('Creating a new contact...');
-        const contactId = await createContact(
+        const recipientContactId = await createContact(
             addressLine1,
             provinceOrState,
             postalOrZip,
@@ -334,12 +334,31 @@ export const createAndSendPostcard = onRequest(async (request, response) => {
         console.log('Creating the postcard asset...');
         const pdfPath = await createPostcardAsset(message, imageUrl);
 
-        // Step 3: Save the reference to Firestore
-        await admin.firestore().collection('postcards').add({
-            contactId,
+        // Step 3: ACTUALLY SEND THE POSTCARD using PostGrid
+        console.log('Sending the physical postcard...');
+
+        // The sender's contact ID (provided by the user)
+        const senderContactId = "contact_kHWXqRGtqHCg8Z9rVsXTNQ";
+
+        // Send the postcard using PostGrid
+        const postcard = await postGridClient.postcard.create({
+            to: recipientContactId,
+            from: senderContactId,
+            pdf: pdfPath,
+            size: '6x4',
+            description: `Postcard to ${firstName} ${lastName}`
+        });
+
+        console.log("Postcard sending initiated:", postcard);
+
+        // Step 4: Save the reference to Firestore
+        const postcardRef = await admin.firestore().collection('postcards').add({
+            recipientContactId,
+            senderContactId,
             pdfPath,
             message,
             imageUrl,
+            postcardId: postcard.id, // Save the PostGrid postcard ID
             recipientDetails: {
                 addressLine1,
                 provinceOrState,
@@ -349,17 +368,20 @@ export const createAndSendPostcard = onRequest(async (request, response) => {
                 lastName,
                 phoneNumber: phoneNumber || ''
             },
-            status: 'created',
+            status: 'sentToPostGrid',
             dateCreated: admin.firestore.FieldValue.serverTimestamp()
         });
 
         response.status(200).json({
             success: true,
-            contactId,
+            postcardId: postcard.id,
+            firestoreId: postcardRef.id,
+            recipientContactId,
+            senderContactId,
             pdfPath
         });
     } catch (error) {
-        console.error('Error creating postcard:', error);
+        console.error('Error creating and sending postcard:', error);
         response.status(500).send('Internal Server Error');
     }
 }); 
