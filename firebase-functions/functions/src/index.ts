@@ -29,7 +29,7 @@ if (!SENDBLUE_CONFIG.apiKey || !SENDBLUE_CONFIG.apiSecret) {
 }
 
 // Initialize PostGrid client
-const postGridClient = new PostGrid(process.env.POSTGRID_TEST_API_KEY || '');
+const postGridClient = new PostGrid(process.env.POSTGRID_API_KEY || '');
 
 export const handleSendblueWebhook = onRequest(async (request, response) => {
     // Verify the request is POST
