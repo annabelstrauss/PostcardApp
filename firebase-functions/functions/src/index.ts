@@ -80,6 +80,105 @@ export const handleSendblueWebhook = onRequest(async (request, response) => {
             addressReceivedAt: admin.firestore.FieldValue.serverTimestamp()
         });
 
+        // Process and send the physical postcard
+        try {
+            console.log(`Starting physical postcard processing for ${postcard.id}...`);
+
+            // Get the updated postcard data
+            const postcardData = postcard.data();
+
+            // Parse the address to extract components
+            // Format expected: Street, City, State ZIP
+            const addressParts = content.split(',').map((part: string) => part.trim());
+            if (addressParts.length < 2) {
+                console.error('Invalid address format:', content);
+                throw new Error('Invalid address format');
+            }
+
+            const addressLine1 = addressParts[0];
+
+            // Handle city, state, zip
+            let cityStateZip = addressParts[1];
+            if (addressParts.length > 2) {
+                cityStateZip = addressParts.slice(1).join(', ');
+            }
+
+            const stateZipMatch = cityStateZip.match(/([^,]+),?\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)?$/);
+            if (!stateZipMatch) {
+                console.error('Could not parse city, state, zip from:', cityStateZip);
+                throw new Error('Invalid city, state, zip format');
+            }
+
+            const city = stateZipMatch[1].trim();
+            const state = stateZipMatch[2].trim();
+            const zip = stateZipMatch[3]?.trim() || '';
+
+            // Name components
+            const nameParts = postcardData.recipientName.split(' ');
+            const firstName = nameParts[0];
+            const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+
+            // Step 1: Create the contact
+            console.log('Creating contact for recipient...');
+            const recipientContactId = await createContact(
+                addressLine1,
+                state,
+                zip,
+                'US', // Assuming US addresses
+                firstName,
+                lastName,
+                postcardData.recipientPhone
+            );
+
+            // Step 2: Create the postcard PDF
+            console.log('Creating the postcard asset...');
+            const pdfPath = await createPostcardAsset(postcardData.message, postcardData.imageUrl);
+
+            // Step 3: Send the postcard using PostGrid
+            console.log('Sending the physical postcard...');
+            const senderContactId = "contact_kHWXqRGtqHCg8Z9rVsXTNQ";
+
+            const postcardResponse = await postGridClient.postcard.create({
+                to: recipientContactId,
+                from: senderContactId,
+                pdf: pdfPath,
+                size: '6x4',
+                description: `Postcard to ${postcardData.recipientName}`
+            });
+
+            console.log("Postcard sending initiated:", postcardResponse);
+
+            // Step 4: Update the Firestore document with PostGrid details
+            await postcard.ref.update({
+                status: 'completed',
+                recipientContactId,
+                senderContactId,
+                pdfPath,
+                postcardId: postcardResponse.id,
+                recipientDetails: {
+                    addressLine1,
+                    city,
+                    provinceOrState: state,
+                    postalOrZip: zip,
+                    countryCode: 'US',
+                    firstName,
+                    lastName,
+                    phoneNumber: postcardData.recipientPhone
+                },
+                completedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            console.log(`Successfully processed and sent physical postcard for ${postcard.id}`);
+        } catch (error: any) {
+            console.error('Error processing physical postcard:', error);
+            await postcard.ref.update({
+                status: 'failed',
+                errorMessage: error.toString(),
+                errorTimestamp: admin.firestore.FieldValue.serverTimestamp()
+            });
+            // Don't throw the error so we can still proceed with thank you message
+        }
+
         // Send thank you message
         try {
             const thankYouResponse = await fetch('https://api.sendblue.co/api/send-message', {
