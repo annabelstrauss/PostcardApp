@@ -20,6 +20,8 @@ class SendblueManager {
         guard !apiKey.isEmpty, !apiSecret.isEmpty else {
             fatalError("Sendblue API credentials not configured. Please add them to Config.plist")
         }
+        print("🔑 Sendblue API Key loaded: \(apiKey.prefix(6))...")
+        print("🔑 Sendblue API Secret loaded: \(apiSecret.prefix(6))...")
     }
     
     func sendInitialMessage(to phoneNumber: String) async throws {
@@ -30,7 +32,7 @@ class SendblueManager {
         
         let endpoint = "\(baseURL)/send-message"
         let parameters: [String: Any] = [
-            "from_number": "+14152005823",
+            "from_number": "+19808003840",
             "number": formattedPhone,
             "content": message
         ]

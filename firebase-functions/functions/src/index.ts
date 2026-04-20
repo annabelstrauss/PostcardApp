@@ -7,12 +7,7 @@ import * as admin from 'firebase-admin';
 import { onRequest } from 'firebase-functions/v2/https';
 import * as fs from 'fs';
 import fetch from 'node-fetch';
-import * as path from 'path';
 import PDFDocument from 'pdfkit';
-
-// Type definition for PostGrid
-// @ts-ignore
-import PostGrid from 'postgrid';
 
 admin.initializeApp();
 
@@ -20,7 +15,7 @@ admin.initializeApp();
 const SENDBLUE_CONFIG = {
     apiKey: process.env.FUNCTIONS_CONFIG_SENDBLUE_API_KEY ?? process.env.SENDBLUE_API_KEY,
     apiSecret: process.env.FUNCTIONS_CONFIG_SENDBLUE_API_SECRET ?? process.env.SENDBLUE_API_SECRET,
-    fromNumber: '+14152005823'
+    fromNumber: '+19808003840'
 };
 
 // Validate credentials exist
@@ -28,8 +23,33 @@ if (!SENDBLUE_CONFIG.apiKey || !SENDBLUE_CONFIG.apiSecret) {
     throw new Error('Sendblue API credentials not configured');
 }
 
-// Initialize PostGrid client
-const postGridClient = new PostGrid(process.env.POSTGRID_API_KEY || '');
+// PostGrid REST API helpers
+const POSTGRID_API_KEY = process.env.POSTGRID_API_KEY || '';
+const POSTGRID_BASE_URL = 'https://api.postgrid.com/print-mail/v1';
+
+async function postGridCreateContact(data: object): Promise<string> {
+    try {
+        const res = await axios.post(`${POSTGRID_BASE_URL}/contacts`, data, {
+            headers: { 'x-api-key': POSTGRID_API_KEY }
+        });
+        return res.data.id;
+    } catch (err: any) {
+        console.error('PostGrid createContact error:', JSON.stringify(err.response?.data));
+        throw err;
+    }
+}
+
+async function postGridCreatePostcard(data: object): Promise<{ id: string }> {
+    try {
+        const res = await axios.post(`${POSTGRID_BASE_URL}/postcards`, data, {
+            headers: { 'x-api-key': POSTGRID_API_KEY }
+        });
+        return res.data;
+    } catch (err: any) {
+        console.error('PostGrid createPostcard error:', JSON.stringify(err.response?.data));
+        throw err;
+    }
+}
 
 export const handleSendblueWebhook = onRequest(async (request, response) => {
     // Verify the request is POST
@@ -136,9 +156,9 @@ export const handleSendblueWebhook = onRequest(async (request, response) => {
 
             // Step 3: Send the postcard using PostGrid
             console.log('Sending the physical postcard...');
-            const senderContactId = "contact_kHWXqRGtqHCg8Z9rVsXTNQ";
+            const senderContactId = "contact_t1r4xSLcZwL1nyznw4dnxv";
 
-            const postcardResponse = await postGridClient.postcard.create({
+            const postcardResponse = await postGridCreatePostcard({
                 to: recipientContactId,
                 from: senderContactId,
                 pdf: pdfPath,
@@ -250,7 +270,7 @@ export async function createContact(
     lastName: string,
     phoneNumber: string
 ): Promise<string> {
-    const newContact = await postGridClient.contact.create({
+    const contactId = await postGridCreateContact({
         addressLine1,
         provinceOrState,
         postalOrZip,
@@ -259,8 +279,8 @@ export async function createContact(
         lastName,
         phoneNumber,
     });
-    console.log("success:", newContact.success);
-    return newContact.id;
+    console.log("Contact created:", contactId);
+    return contactId;
 }
 
 /**
@@ -302,6 +322,10 @@ export async function createPostcardAsset(postcardMessage: string, postcardPictu
 
     const totalPageDim: [number, number] = [width + (bleed * 2), height + (bleed * 2)];
 
+    const uuid = crypto.randomUUID();
+    const tempImagePath = `/tmp/temp_image_${uuid}.jpg`;
+    const tempPdfPath = `/tmp/postcard_${uuid}.pdf`;
+
     try {
         // Download the image from Firebase Storage
         const response = await axios({
@@ -310,54 +334,63 @@ export async function createPostcardAsset(postcardMessage: string, postcardPictu
             responseType: 'arraybuffer'
         });
 
-        // Save the image temporarily
-        const tempImagePath = path.join(__dirname, `temp_image_${crypto.randomUUID()}.jpg`);
         fs.writeFileSync(tempImagePath, response.data);
 
-        // Create a document
-        const doc = new PDFDocument({
-            size: totalPageDim as [number, number]
-        });
+        // Create a document and wait for it to finish writing
+        const doc = new PDFDocument({ size: totalPageDim as [number, number] });
+        const writeStream = fs.createWriteStream(tempPdfPath);
+        doc.pipe(writeStream);
 
-        const pdfPath = `${crypto.randomUUID()}.pdf`;
-        doc.pipe(fs.createWriteStream(pdfPath));
-
-        // Use the downloaded image
+        // Front page — full bleed image
         doc.image(tempImagePath, 0, 0, {
-            width,
-            height,
+            width: totalPageDim[0],
+            height: totalPageDim[1],
             cover: totalPageDim,
             align: "center",
             valign: "center"
         });
 
-        doc.rect(bleed, bleed, width, height).dash(5, { space: 10 }).stroke("blue");
-        doc.rect(bleed * 2, bleed * 2, width - bleed * 2, height - bleed * 2).dash(5, { space: 10 }).stroke("red");
-
-        // Add another page
-        doc.addPage({
-            size: totalPageDim
-        })
-            .fontSize(14);
-
-        doc.rect(bleed, bleed, width, height).dash(5, { space: 10 }).stroke("blue");
-        doc.rect(bleed * 2, bleed * 2, width - bleed * 2, height - bleed * 2).dash(5, { space: 10 }).stroke("red");
-
+        // Back page
+        doc.addPage({ size: totalPageDim }).fontSize(14);
         doc.rect(bleed, bleed, 2.0576131688 * pointMult, 1.5740740742 * pointMult).undash().stroke("black");
-
         doc.rect(3.7294238681 * pointMult, bleed, 2.3919753088 * pointMult, height).stroke();
-
         doc.text(postcardMessage, bleed * 2, height / 3 * 2, { width: width / 3 * 2, align: 'left' });
 
         doc.end();
 
-        // Clean up the temporary image file after PDF is created
-        doc.on('end', () => {
-            fs.unlinkSync(tempImagePath);
+        // Wait for the PDF to fully write to disk
+        await new Promise<void>((resolve, reject) => {
+            writeStream.on('finish', resolve);
+            writeStream.on('error', reject);
         });
 
-        return pdfPath;
+        // Upload PDF to Firebase Storage with a download token (no IAM signing needed)
+        const storagePath = `postcards/pdfs/${uuid}.pdf`;
+        const downloadToken = crypto.randomUUID();
+        const bucket = admin.storage().bucket();
+        await bucket.upload(tempPdfPath, {
+            destination: storagePath,
+            metadata: {
+                contentType: 'application/pdf',
+                metadata: { firebaseStorageDownloadTokens: downloadToken }
+            }
+        });
+
+        // Build the download URL using the token — same format as photo URLs
+        const encodedPath = encodeURIComponent(storagePath);
+        const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodedPath}?alt=media&token=${downloadToken}`;
+
+        console.log('PDF uploaded to Storage, URL:', url);
+
+        // Clean up temp files
+        fs.unlinkSync(tempImagePath);
+        fs.unlinkSync(tempPdfPath);
+
+        return url;
     } catch (error) {
+        // Clean up temp files on error
+        if (fs.existsSync(tempImagePath)) fs.unlinkSync(tempImagePath);
+        if (fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath);
         console.error('Error creating postcard:', error);
         throw error;
     }
@@ -437,10 +470,10 @@ export const createAndSendPostcard = onRequest(async (request, response) => {
         console.log('Sending the physical postcard...');
 
         // The sender's contact ID (provided by the user)
-        const senderContactId = "contact_kHWXqRGtqHCg8Z9rVsXTNQ";
+        const senderContactId = "contact_t1r4xSLcZwL1nyznw4dnxv";
 
         // Send the postcard using PostGrid
-        const postcard = await postGridClient.postcard.create({
+        const postcard = await postGridCreatePostcard({
             to: recipientContactId,
             from: senderContactId,
             pdf: pdfPath,

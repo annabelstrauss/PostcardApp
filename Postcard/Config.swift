@@ -2,8 +2,8 @@ import Foundation
 
 enum Config {
     private static let defaults: [String: Any] = [
-        "SENDBLUE_API_KEY": "",
-        "SENDBLUE_API_SECRET": ""
+        "SENDBLUE_API_KEY": "9e5e8c5a28ad882885c2f00f5f6281ef",
+        "SENDBLUE_API_SECRET": "2eb6aaf21f7516fcb1abdc44b70f8150"
     ]
     
     static func value(for key: String) -> String {

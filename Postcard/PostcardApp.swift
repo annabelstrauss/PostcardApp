@@ -15,6 +15,13 @@ import FirebaseStorage
 struct PostcardApp: App {
     init() {
         FirebaseApp.configure()
+        Task {
+            do {
+                try await Auth.auth().signInAnonymously()
+            } catch {
+                print("❌ Anonymous auth failed: \(error)")
+            }
+        }
     }
     
     // Initialize Firebase
